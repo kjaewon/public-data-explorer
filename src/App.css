@@ -38,6 +38,26 @@
   color: var(--color-on-surface-variant);
 }
 
+.error-state {
+  color: var(--color-error, #b3261e);
+}
+
+.error-state p {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.error-state button {
+  margin-top: var(--spacing-sm);
+  padding: 8px 20px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
 @media (max-width: 768px) {
   .content-area {
     padding: var(--spacing-md);

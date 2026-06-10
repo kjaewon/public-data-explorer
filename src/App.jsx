@@ -16,6 +16,7 @@ function App() {
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsLoading, setRowsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   const [filterOptions, setFilterOptions] = useState(EMPTY_FILTERS);
   const [dashboardStats, setDashboardStats] = useState(null);
@@ -59,7 +60,10 @@ function App() {
     if (filters.formats.length)    q = q.overlaps('포맷', filters.formats);
 
     const { data, count, error } = await q;
-    if (!error) {
+    if (error) {
+      setFetchError(error.message);
+    } else {
+      setFetchError(null);
       setRows(data ?? []);
       setTotalCount(count ?? 0);
     }
@@ -128,7 +132,15 @@ function App() {
         />
 
         <div className="content-area">
-          {isInitialLoading ? (
+          {fetchError ? (
+            <div className="loading-state error-state">
+              <h2>데이터를 불러오지 못했습니다</h2>
+              <p>{fetchError}</p>
+              <button onClick={() => fetchRows(currentPage, searchTerm, selectedFilters)}>
+                다시 시도
+              </button>
+            </div>
+          ) : isInitialLoading ? (
             <div className="loading-state">
               <h2>데이터를 불러오는 중입니다...</h2>
             </div>
