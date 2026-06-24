@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from './lib/supabase';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  hasData, syncFromSupabase, loadAllDatasets,
+  filterDatasets, computeFilterOptions, computeDashboardStats,
+} from './lib/db';
 import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
 import DataGrid from './components/DataGrid';
@@ -7,16 +10,17 @@ import Dashboard from './components/Dashboard';
 import DetailPanel from './components/DetailPanel';
 import './App.css';
 
-const ITEMS_PER_PAGE = 20;
-
 const EMPTY_FILTERS = { types: [], agencies: [], categories: [], formats: [] };
 
 function App() {
+  const [appState, setAppState] = useState('init'); // 'init' | 'syncing' | 'ready' | 'error'
+  const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0 });
+  const [initError, setInitError] = useState(null);
+
+  const allRowsRef = useRef([]);
   const [rows, setRows] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsLoading, setRowsLoading] = useState(true);
-  const [fetchError, setFetchError] = useState(null);
 
   const [filterOptions, setFilterOptions] = useState(EMPTY_FILTERS);
   const [dashboardStats, setDashboardStats] = useState(null);
@@ -26,60 +30,54 @@ function App() {
   const [selectedRow, setSelectedRow] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // 앱 기동 시 1회: 필터 옵션 + 대시보드 통계
-  useEffect(() => {
-    Promise.all([
-      supabase.rpc('get_filter_options'),
-      supabase.rpc('dashboard_stats'),
-    ]).then(([optRes, statsRes]) => {
-      if (optRes.data) setFilterOptions(optRes.data);
-      if (statsRes.data) setDashboardStats(statsRes.data);
+  const applyFilter = useCallback((search, filters, page) => {
+    const { rows: r, totalCount: c } = filterDatasets(allRowsRef.current, { search, filters, page });
+    setRows(r);
+    setTotalCount(c);
+  }, []);
+
+  const initFromDB = useCallback(async () => {
+    const all = await loadAllDatasets();
+    allRowsRef.current = all;
+    setFilterOptions(computeFilterOptions(all));
+    setDashboardStats(computeDashboardStats(all));
+    setAppState('ready');
+  }, []);
+
+  const runSync = useCallback(async () => {
+    setAppState('syncing');
+    setSyncProgress({ current: 0, total: 0 });
+    await syncFromSupabase((current, total) => {
+      setSyncProgress({ current, total });
     });
-  }, []);
+    await initFromDB();
+  }, [initFromDB]);
 
-  // 서버사이드 필터링 + 페이지네이션
-  const fetchRows = useCallback(async (page, search, filters) => {
-    setRowsLoading(true);
-    const effectiveSearch = search.length === 1 ? '' : search;
-    const offset = (page - 1) * ITEMS_PER_PAGE;
-
-    let q = supabase
-      .from('datasets')
-      .select('*', { count: 'exact' })
-      .range(offset, offset + ITEMS_PER_PAGE - 1)
-      .order('조회수', { ascending: false });
-
-    if (effectiveSearch) {
-      q = q.or(
-        `목록명.ilike.%${effectiveSearch}%,키워드.ilike.%${effectiveSearch}%,설명.ilike.%${effectiveSearch}%`
-      );
-    }
-    if (filters.types.length)      q = q.in('목록유형', filters.types);
-    if (filters.agencies.length)   q = q.in('제공기관', filters.agencies);
-    if (filters.categories.length) q = q.in('분류체계', filters.categories);
-    if (filters.formats.length)    q = q.overlaps('포맷', filters.formats);
-
-    const { data, count, error } = await q;
-    if (error) {
-      setFetchError(error.message);
-    } else {
-      setFetchError(null);
-      setRows(data ?? []);
-      setTotalCount(count ?? 0);
-    }
-    setRowsLoading(false);
-  }, []);
-
-  // 검색어는 300ms 디바운스, 필터/페이지는 즉시
   useEffect(() => {
-    const delay = searchTerm.length > 0 ? 300 : 0;
-    const timeout = setTimeout(() => {
-      fetchRows(currentPage, searchTerm, selectedFilters);
-    }, delay);
-    return () => clearTimeout(timeout);
-  }, [currentPage, searchTerm, selectedFilters, fetchRows]);
+    (async () => {
+      try {
+        const dataExists = await hasData();
+        if (!dataExists) {
+          await runSync();
+        } else {
+          await initFromDB();
+        }
+      } catch (e) {
+        setInitError(e.message);
+        setAppState('error');
+      }
+    })();
+  }, []);
 
-  // 검색/필터 변경 시 1페이지로 리셋 (핸들러에서 동기적으로 처리)
+  useEffect(() => {
+    if (appState !== 'ready') return;
+    const delay = searchTerm.length > 0 ? 150 : 0;
+    const timer = setTimeout(() => {
+      applyFilter(searchTerm, selectedFilters, currentPage);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [appState, searchTerm, selectedFilters, currentPage, applyFilter]);
+
   const handleSearchChange = (term) => {
     setSearchTerm(term);
     setCurrentPage(1);
@@ -88,10 +86,10 @@ function App() {
   const handleFilterChange = (category, value) => {
     setCurrentPage(1);
     setSelectedFilters(prev => {
-      const current = prev[category];
-      const updated = current.includes(value)
-        ? current.filter(item => item !== value)
-        : [...current, value];
+      const cur = prev[category];
+      const updated = cur.includes(value)
+        ? cur.filter(v => v !== value)
+        : [...cur, value];
       return { ...prev, [category]: updated };
     });
   };
@@ -107,7 +105,42 @@ function App() {
     setSearchTerm('');
   };
 
-  const isInitialLoading = rowsLoading && rows.length === 0;
+  if (appState === 'init' || appState === 'syncing') {
+    const { current, total } = syncProgress;
+    const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+    return (
+      <div className="sync-screen">
+        <div className="sync-box">
+          <div className="sync-spinner" />
+          <h2 className="sync-title">
+            {appState === 'init' ? '초기화 중...' : '데이터 동기화 중...'}
+          </h2>
+          {total > 0 && (
+            <>
+              <p className="sync-count">{current.toLocaleString()} / {total.toLocaleString()}건</p>
+              <div className="sync-progress-bar">
+                <div className="sync-progress-fill" style={{ width: `${pct}%` }} />
+              </div>
+              <p className="sync-pct">{pct}%</p>
+            </>
+          )}
+          <p className="sync-note">최초 방문 시 한 번만 다운로드됩니다.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (appState === 'error') {
+    return (
+      <div className="sync-screen">
+        <div className="sync-box">
+          <h2 className="sync-title">초기화 실패</h2>
+          <p className="sync-note">{initError}</p>
+          <button className="sync-retry-btn" onClick={runSync}>다시 시도</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
@@ -115,6 +148,7 @@ function App() {
         searchTerm={searchTerm}
         onSearchChange={handleSearchChange}
         onMenuClick={() => setSidebarOpen(true)}
+        onRefresh={runSync}
       />
 
       <div className="main-content">
@@ -132,31 +166,15 @@ function App() {
         />
 
         <div className="content-area">
-          {fetchError ? (
-            <div className="loading-state error-state">
-              <h2>데이터를 불러오지 못했습니다</h2>
-              <p>{fetchError}</p>
-              <button onClick={() => fetchRows(currentPage, searchTerm, selectedFilters)}>
-                다시 시도
-              </button>
-            </div>
-          ) : isInitialLoading ? (
-            <div className="loading-state">
-              <h2>데이터를 불러오는 중입니다...</h2>
-            </div>
-          ) : (
-            <>
-              <Dashboard stats={dashboardStats} />
-              <DataGrid
-                rows={rows}
-                totalCount={totalCount}
-                currentPage={currentPage}
-                onPageChange={setCurrentPage}
-                onRowClick={setSelectedRow}
-                loading={rowsLoading}
-              />
-            </>
-          )}
+          <Dashboard stats={dashboardStats} />
+          <DataGrid
+            rows={rows}
+            totalCount={totalCount}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            onRowClick={setSelectedRow}
+            loading={false}
+          />
         </div>
       </div>
 

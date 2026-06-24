@@ -1,3 +1,92 @@
+/* Sync screen */
+.sync-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background-color: #003d9b;
+}
+
+.sync-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px;
+  width: 320px;
+}
+
+.sync-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.sync-title {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.sync-count {
+  color: #aac4ff;
+  font-size: 14px;
+  margin: 0;
+}
+
+.sync-progress-bar {
+  width: 100%;
+  height: 6px;
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.sync-progress-fill {
+  height: 100%;
+  background-color: #fff;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.sync-pct {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.sync-note {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  text-align: center;
+  margin: 0;
+}
+
+.sync-retry-btn {
+  margin-top: 8px;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sync-retry-btn:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
 /* App Layout */
 .app-container {
   display: flex;

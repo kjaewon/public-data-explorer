@@ -34,6 +34,25 @@
   color: var(--color-on-surface);
 }
 
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-on-surface-variant);
+  padding: 6px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s, background-color 0.2s;
+}
+
+.refresh-btn:hover {
+  opacity: 1;
+  background-color: var(--color-surface-container);
+}
+
 .logo-container {
   display: flex;
   align-items: center;
