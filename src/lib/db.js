@@ -48,7 +48,8 @@ export async function loadAllDatasets() {
   return db.datasets.orderBy('조회수').reverse().toArray();
 }
 
-export function filterDatasets(allRows, { search = '', filters = {}, page = 1 }) {
+// Returns all matching rows (no pagination — caller slices for display)
+export function filterDatasets(allRows, { search = '', filters = {} }) {
   const term = search.length <= 1 ? '' : search.trim().toLowerCase();
 
   let result = allRows;
@@ -60,26 +61,16 @@ export function filterDatasets(allRows, { search = '', filters = {}, page = 1 })
       r.설명?.toLowerCase().includes(term)
     );
   }
-  if (filters.types?.length) {
-    result = result.filter(r => filters.types.includes(r.목록유형));
-  }
-  if (filters.agencies?.length) {
-    result = result.filter(r => filters.agencies.includes(r.제공기관));
-  }
-  if (filters.categories?.length) {
-    result = result.filter(r => filters.categories.includes(r.분류체계));
-  }
+  if (filters.types?.length)      result = result.filter(r => filters.types.includes(r.목록유형));
+  if (filters.agencies?.length)   result = result.filter(r => filters.agencies.includes(r.제공기관));
+  if (filters.categories?.length) result = result.filter(r => filters.categories.includes(r.분류체계));
   if (filters.formats?.length) {
     result = result.filter(r =>
       Array.isArray(r.포맷) && r.포맷.some(f => filters.formats.includes(f))
     );
   }
 
-  const totalCount = result.length;
-  const offset = (page - 1) * ITEMS_PER_PAGE;
-  const rows = result.slice(offset, offset + ITEMS_PER_PAGE);
-
-  return { rows, totalCount };
+  return result;
 }
 
 export function computeFilterOptions(allRows) {

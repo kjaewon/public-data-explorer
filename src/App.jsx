@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   hasData, syncFromSupabase, loadAllDatasets,
   filterDatasets, computeFilterOptions, computeDashboardStats,
+  ITEMS_PER_PAGE,
 } from './lib/db';
 import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
@@ -13,28 +14,59 @@ import './App.css';
 const EMPTY_FILTERS = { types: [], agencies: [], categories: [], formats: [] };
 
 function App() {
-  const [appState, setAppState] = useState('init'); // 'init' | 'syncing' | 'ready' | 'error'
+  const [appState, setAppState] = useState('init');
   const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0 });
   const [initError, setInitError] = useState(null);
 
   const allRowsRef = useRef([]);
-  const [rows, setRows] = useState([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
+  const contentAreaRef = useRef(null);
+
+  // Separate input value from submitted search
+  const [searchInput, setSearchInput] = useState('');
+  const [activeSearch, setActiveSearch] = useState('');
+  const [selectedFilters, setSelectedFilters] = useState(EMPTY_FILTERS);
+  const [displayLimit, setDisplayLimit] = useState(ITEMS_PER_PAGE);
 
   const [filterOptions, setFilterOptions] = useState(EMPTY_FILTERS);
   const [dashboardStats, setDashboardStats] = useState(null);
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFilters, setSelectedFilters] = useState(EMPTY_FILTERS);
   const [selectedRow, setSelectedRow] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const applyFilter = useCallback((search, filters, page) => {
-    const { rows: r, totalCount: c } = filterDatasets(allRowsRef.current, { search, filters, page });
-    setRows(r);
-    setTotalCount(c);
+  // All matching rows (recomputed when search/filter changes)
+  const filteredRows = useMemo(() => {
+    if (appState !== 'ready') return [];
+    return filterDatasets(allRowsRef.current, { search: activeSearch, filters: selectedFilters });
+  }, [appState, activeSearch, selectedFilters]);
+
+  const displayedRows = useMemo(
+    () => filteredRows.slice(0, displayLimit),
+    [filteredRows, displayLimit]
+  );
+
+  const hasMore = displayLimit < filteredRows.length;
+
+  const loadMore = useCallback(() => {
+    setDisplayLimit(prev => prev + ITEMS_PER_PAGE);
   }, []);
+
+  // Reset display window when query changes
+  useEffect(() => {
+    setDisplayLimit(ITEMS_PER_PAGE);
+    if (contentAreaRef.current) contentAreaRef.current.scrollTop = 0;
+  }, [activeSearch, selectedFilters]);
+
+  // Infinite scroll via scroll event
+  useEffect(() => {
+    const el = contentAreaRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 300 && hasMore) {
+        loadMore();
+      }
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [hasMore, loadMore]);
 
   const initFromDB = useCallback(async () => {
     const all = await loadAllDatasets();
@@ -47,9 +79,7 @@ function App() {
   const runSync = useCallback(async () => {
     setAppState('syncing');
     setSyncProgress({ current: 0, total: 0 });
-    await syncFromSupabase((current, total) => {
-      setSyncProgress({ current, total });
-    });
+    await syncFromSupabase((current, total) => setSyncProgress({ current, total }));
     await initFromDB();
   }, [initFromDB]);
 
@@ -57,11 +87,8 @@ function App() {
     (async () => {
       try {
         const dataExists = await hasData();
-        if (!dataExists) {
-          await runSync();
-        } else {
-          await initFromDB();
-        }
+        if (!dataExists) await runSync();
+        else await initFromDB();
       } catch (e) {
         setInitError(e.message);
         setAppState('error');
@@ -69,40 +96,32 @@ function App() {
     })();
   }, []);
 
-  useEffect(() => {
-    if (appState !== 'ready') return;
-    const delay = searchTerm.length > 0 ? 150 : 0;
-    const timer = setTimeout(() => {
-      applyFilter(searchTerm, selectedFilters, currentPage);
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [appState, searchTerm, selectedFilters, currentPage, applyFilter]);
+  // Submit search explicitly
+  const handleSearchSubmit = useCallback(() => {
+    setActiveSearch(searchInput);
+  }, [searchInput]);
 
-  const handleSearchChange = (term) => {
-    setSearchTerm(term);
-    setCurrentPage(1);
-  };
+  const handleSearchChange = useCallback((value) => {
+    setSearchInput(value);
+    if (!value) setActiveSearch(''); // Clear immediately when emptied
+  }, []);
 
   const handleFilterChange = (category, value) => {
-    setCurrentPage(1);
     setSelectedFilters(prev => {
       const cur = prev[category];
-      const updated = cur.includes(value)
-        ? cur.filter(v => v !== value)
-        : [...cur, value];
+      const updated = cur.includes(value) ? cur.filter(v => v !== value) : [...cur, value];
       return { ...prev, [category]: updated };
     });
   };
 
   const handleCategoryChange = (newCategories) => {
-    setCurrentPage(1);
     setSelectedFilters(prev => ({ ...prev, categories: newCategories }));
   };
 
   const handleClearFilters = () => {
-    setCurrentPage(1);
     setSelectedFilters(EMPTY_FILTERS);
-    setSearchTerm('');
+    setSearchInput('');
+    setActiveSearch('');
   };
 
   if (appState === 'init' || appState === 'syncing') {
@@ -145,8 +164,9 @@ function App() {
   return (
     <div className="app-container">
       <TopBar
-        searchTerm={searchTerm}
+        searchInput={searchInput}
         onSearchChange={handleSearchChange}
+        onSearchSubmit={handleSearchSubmit}
         onMenuClick={() => setSidebarOpen(true)}
         onRefresh={runSync}
       />
@@ -165,23 +185,18 @@ function App() {
           onClearFilters={handleClearFilters}
         />
 
-        <div className="content-area">
+        <div className="content-area" ref={contentAreaRef}>
           <Dashboard stats={dashboardStats} />
           <DataGrid
-            rows={rows}
-            totalCount={totalCount}
-            currentPage={currentPage}
-            onPageChange={setCurrentPage}
+            rows={displayedRows}
+            totalCount={filteredRows.length}
+            hasMore={hasMore}
             onRowClick={setSelectedRow}
-            loading={false}
           />
         </div>
       </div>
 
-      <DetailPanel
-        data={selectedRow}
-        onClose={() => setSelectedRow(null)}
-      />
+      <DetailPanel data={selectedRow} onClose={() => setSelectedRow(null)} />
     </div>
   );
 }

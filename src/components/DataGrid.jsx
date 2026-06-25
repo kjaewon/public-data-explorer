@@ -1,20 +1,15 @@
 import React from 'react';
 import './DataGrid.css';
 
-const ITEMS_PER_PAGE = 20;
-
-const DataGrid = ({ rows, totalCount, currentPage, onPageChange, onRowClick, loading }) => {
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-
+const DataGrid = ({ rows, totalCount, hasMore, onRowClick }) => {
   return (
     <div className="data-grid-container">
       <div className="grid-header">
         <span className="total-count">
           총 <strong>{totalCount.toLocaleString()}</strong>건
         </span>
-        {loading && <span className="grid-loading-indicator">불러오는 중...</span>}
       </div>
-      <div className={`table-wrapper${loading ? ' table-loading' : ''}`}>
+      <div className="table-wrapper">
         <table className="data-table">
           <thead>
             <tr>
@@ -41,7 +36,7 @@ const DataGrid = ({ rows, totalCount, currentPage, onPageChange, onRowClick, loa
                 <td data-label="수정일">{row.수정일}</td>
               </tr>
             ))}
-            {rows.length === 0 && !loading && (
+            {rows.length === 0 && (
               <tr>
                 <td colSpan="6" className="empty-state">검색 결과가 없습니다.</td>
               </tr>
@@ -49,22 +44,9 @@ const DataGrid = ({ rows, totalCount, currentPage, onPageChange, onRowClick, loa
           </tbody>
         </table>
       </div>
-
-      {totalPages > 1 && (
-        <div className="pagination">
-          <button onClick={() => onPageChange(1)} disabled={currentPage === 1}>
-            처음
-          </button>
-          <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1}>
-            이전
-          </button>
-          <span>{currentPage} / {totalPages}</span>
-          <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages}>
-            다음
-          </button>
-          <button onClick={() => onPageChange(totalPages)} disabled={currentPage === totalPages}>
-            맨뒤
-          </button>
+      {hasMore && (
+        <div className="load-more-indicator">
+          <span>스크롤하여 더 보기</span>
         </div>
       )}
     </div>
