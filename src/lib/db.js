@@ -45,7 +45,8 @@ export async function syncFromSupabase(onProgress) {
 }
 
 export async function loadAllDatasets() {
-  return db.datasets.orderBy('조회수').reverse().toArray();
+  const all = await db.datasets.toArray();
+  return all.sort((a, b) => (b.조회수 ?? 0) - (a.조회수 ?? 0));
 }
 
 // Returns all matching rows (no pagination — caller slices for display)
