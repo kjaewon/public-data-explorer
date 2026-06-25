@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   hasData, syncFromSupabase, loadAllDatasets,
-  filterDatasets, computeFilterOptions, computeDashboardStats,
+  filterDatasets, computeFilterOptions,
   ITEMS_PER_PAGE,
 } from './lib/db';
 import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
 import DataGrid from './components/DataGrid';
-import Dashboard from './components/Dashboard';
 import DetailPanel from './components/DetailPanel';
 import './App.css';
 
@@ -28,7 +27,6 @@ function App() {
   const [displayLimit, setDisplayLimit] = useState(ITEMS_PER_PAGE);
 
   const [filterOptions, setFilterOptions] = useState(EMPTY_FILTERS);
-  const [dashboardStats, setDashboardStats] = useState(null);
   const [selectedRow, setSelectedRow] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -72,7 +70,6 @@ function App() {
     const all = await loadAllDatasets();
     allRowsRef.current = all;
     setFilterOptions(computeFilterOptions(all));
-    setDashboardStats(computeDashboardStats(all));
     setAppState('ready');
   }, []);
 
@@ -186,7 +183,6 @@ function App() {
         />
 
         <div className="content-area" ref={contentAreaRef}>
-          <Dashboard stats={dashboardStats} />
           <DataGrid
             rows={displayedRows}
             totalCount={filteredRows.length}

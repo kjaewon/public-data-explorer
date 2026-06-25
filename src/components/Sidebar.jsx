@@ -190,18 +190,18 @@ const Sidebar = ({ isOpen, onClose, filters, selectedFilters, onFilterChange, on
           selected={selectedFilters.types}
           onChange={(val) => onFilterChange('types', val)}
         />
+        <CategoryFilterGroup
+          title="분류체계"
+          options={filters.categories}
+          selected={selectedFilters.categories}
+          onChange={onCategoryChange}
+        />
         <FilterGroup
           title="제공기관"
           options={filters.agencies}
           selected={selectedFilters.agencies}
           onChange={(val) => onFilterChange('agencies', val)}
           searchable
-        />
-        <CategoryFilterGroup
-          title="분류체계"
-          options={filters.categories}
-          selected={selectedFilters.categories}
-          onChange={onCategoryChange}
         />
         <FilterGroup
           title="데이터 포맷"
